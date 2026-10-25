@@ -1,0 +1,289 @@
+GUÍA DE LABORATORIO 10  ·  TECNOLOGÍA WEB I
+Laboratorio 10 — TELNET vs SSH: la prueba del espía, la identidad del servidor y el acceso con claves ed25519
+TELNET vs SSH: la prueba del espía, la identidad del servidor y el acceso con claves ed25519
+1. Objetivo
+Demostrar con capturas reales la diferencia entre TELNET y SSH, regenerar y verificar la identidad del servidor, configurar el acceso por clave ed25519 con known_hosts y ~/.ssh/config, y publicar un archivo por scp, hasta pasar un verificador de 11 comprobaciones.
+2. Contexto del problema
+El técnico anterior administraba el servidor del colegio con TELNET 'porque era más simple'. La directora quiere entender el riesgo con una prueba concreta y que desde ahora el equipo de TI entre solo con claves, sin contraseñas viajando por la red.
+3. Requisitos previos
+Servidor del colegio (labs 2-5) con el usuario administrador del Lab 2.
+Opcional: Wireshark en tu PC para abrir los archivos .pcap.
+Preparación del entorno
+sudo -i
+cd ~/lab10
+ssh -V
+  → OpenSSH_9.6p1 Ubuntu-3ubuntu13…
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+  → … root@buildkitsandbox (ED25519)  ← ¡ojo!
+4. Archivos del laboratorio
+Descarga la carpeta codigo/lab10/inicio que entrega el docente. Contiene:
+5. Desarrollo paso a paso
+Paso 1 — La prueba del espía (8 min)
+Parte A — capturas reales
+$ bash capturar.sh telnet
+Captura de telnet: 44 paquetes
+  👀 se lee en claro: secretaria
+  👀 se lee en claro: Circular2026
+  👀 se lee en claro: notas-confidenciales-5to-B
+$ bash capturar.sh ssh
+Captura de ssh: 49 paquetes
+  🔒 no aparece:     secretaria
+  🔒 no aparece:     Circular2026
+  🔒 no aparece:     notas-confidenciales-5to-B
+  versión anunciada: SSH-2.0-OpenSSH_9.6p1
+bash telnet_laboratorio.sh activar y revisa /etc/inetd.conf.
+bash capturar.sh telnet y bash capturar.sh ssh; completa la tabla.
+Abre resultados/telnet.pcap en Wireshark (Seguir flujo TCP).
+Paso 2 — La identidad del servidor (6 min)
+Parte B — clave de host y kex
+$ ssh -v horizonte true 2>&1 | grep kex
+kex: algorithm: sntrup761x25519-sha512@openssh.com
+kex: host key algorithm: ssh-ed25519
+kex: server->client cipher: chacha20-poly1305@openssh.com
+Server host key: ssh-ed25519 SHA256:4uxswhmOJGOW…
+$ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+256 SHA256:4uxswhmOJGOW… root@buildkitsandbox
+                          └ ¡creada al construir la
+                            imagen: igual en todos!
+Mira el comentario de la clave de host y responde por qué es un problema.
+Completa el TODO 1 (regenerar las claves de host).
+Identifica el algoritmo de kex con ssh -v.
+Paso 3 — Acceso con clave ed25519 (8 min)
+Parte C — preparar_ssh.sh
+$ ssh-keygen -t ed25519 -a 64 -C "admin-horizonte-2026"
+  ~/.ssh/id_ed25519      ← PRIVADA (nunca sale)
+  ~/.ssh/id_ed25519.pub  ← pública (se copia)
+$ ssh-copy-id ana@srv-horizonte
+  → /home/ana/.ssh/authorized_keys  (700 / 600)
+# ~/.ssh/config
+Host horizonte
+    HostName 192.168.56.10
+    User ana
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+$ ssh horizonte     # sin contraseña
+$ scp comunicado.html horizonte:/srv/horizonte/www/
+Completa los TODO 2 a 4 (par ed25519, permisos, alias en ~/.ssh/config).
+bash preparar_ssh.sh <tu_usuario> y prueba ssh horizonte.
+Paso 4 — Publicar con scp (4 min)
+Partes D y reflexión — el aviso de identidad cambiada
+# regenerar la identidad del servidor
+$ sudo rm /etc/ssh/ssh_host_*
+$ sudo ssh-keygen -A && sudo systemctl restart ssh
+256 SHA256:5q9j/5WQ247p… root@srv-horizonte
+# si la clave cambia sin aviso:
+@  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!  @
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now
+(man-in-the-middle attack)!
+scp comunicado.html horizonte:/srv/horizonte/www/ y ábrelo en el navegador.
+Prueba sftp horizonte y rsync -av.
+Paso 5 — Cierre seguro (4 min)
+bash telnet_laboratorio.sh desactivar.
+bash verificar_lab10.sh <tu_usuario> → 11 de 11.
+Responde la reflexión sobre el aviso de identidad cambiada.
+6. Retos (para llegar a Estratégico)
+Publica la huella de tu servidor como registro SSHFP en la zona horizonte.internal (clase 7) y conéctate con VerifyHostKeyDNS.
+Usa ssh-agent con una clave protegida por frase y mide cuántas veces te pide la frase en 5 conexiones.
+Crea una CA de SSH (ssh-keygen -s) y firma la clave de host: los clientes confían en la CA, no en cada huella.
+7. Uso de Inteligencia Artificial en este laboratorio
+Prompts sugeridos (cópialos y adáptalos)
+Prompt 1
+Esta es la salida de ssh -v de mi conexión: [pega sin datos sensibles]. Explica cada algoritmo negociado.
+Prompt 2
+¿Qué riesgos tiene que varias VMs clonadas compartan las claves de host de SSH y cómo se corrige en Ubuntu?
+Prompt 3
+Me aparece 'REMOTE HOST IDENTIFICATION HAS CHANGED'. ¿Qué pasos seguros debo seguir antes de actualizar known_hosts?
+8. Entregable
+preparar_ssh.sh completo y la carpeta resultados/ (capturas .pcap y .txt).
+Captura del verificador con 11 de 11 y de Wireshark con la sesión TELNET.
+HOJA_TRABAJO.md (partes A a E) y BITACORA_IA.md.
+9. Rúbrica de evaluación (100 puntos)
+Escala de valoración institucional (Programa de Formación de Asignatura, UPDS):
+Anexo — Archivos de inicio
+Estos son los archivos que debes completar, tal como vienen en la carpeta inicio.
+HOJA_TRABAJO.md
+# Laboratorio 10 — Hoja de trabajo: TELNET vs SSH, "la prueba del espía"
+Nombre: ______________________   Fecha: ___/___/2026
+Trabaja en tu servidor del colegio (VM o `horizonte-servidor` en Docker), como root (`sudo -i`).
+Usuaria de prueba que crean los scripts: `secretaria` / `Circular2026` (solo para el laboratorio).
+## Parte A — La prueba del espía
+1. `bash telnet_laboratorio.sh activar` — ¿en qué estado venía TELNET en Ubuntu 24.04? (mira `/etc/inetd.conf`)
+2. `bash capturar.sh telnet` y `bash capturar.sh ssh`. Completa:
+| | TELNET (puerto 23) | SSH (puerto 22) |
+|---|---|---|
+| ¿Se lee el usuario? | | |
+| ¿Se lee la contraseña? | | |
+| ¿Se lee lo que se escribió en la sesión? | | |
+| ¿Qué se ve en claro? | | |
+3. Abre `resultados/telnet.pcap` en Wireshark (Analizar > Seguir > Flujo TCP): captura la pantalla.
+4. `bash telnet_laboratorio.sh desactivar`. ¿Por qué existe todavía TELNET en algunos equipos (routers, impresoras)?
+## Parte B — ¿Con quién estoy hablando? (claves de host)
+1. `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` — ¿qué dice el comentario al final? ¿Qué problema hay si 30
+   estudiantes (o 30 VMs clonadas) tienen la MISMA clave de host?
+2. Completa el TODO 1 de `preparar_ssh.sh` (regenerar claves de host).
+3. `ssh -v -o BatchMode=yes localhost true 2>&1 | grep kex:` — ¿qué algoritmo de intercambio de claves se negoció?
+   Busca qué significa "sntrup761x25519".
+## Parte C — Acceso con clave ed25519
+Completa los TODO 2 a 4 de `preparar_ssh.sh` y ejecútalo: `bash preparar_ssh.sh <tu_usuario_del_lab2>`.
+1. Diferencia entre `id_ed25519` y `id_ed25519.pub`. ¿Cuál nunca sale de tu PC?
+2. ¿Qué hace `authorized_keys`? ¿Por qué debe tener permisos 600?
+3. Prueba `ssh horizonte`. ¿Te pidió contraseña?
+## Parte D — Publicar con SSH
+`scp comunicado.html horizonte:/srv/horizonte/www/` y ábrelo en el navegador (https://www.horizonte.internal/comunicado.html).
+¿De quién y de qué grupo quedó el archivo? ¿Por qué (Lab 2)? Prueba también `sftp horizonte` y `rsync -av`.
+## Parte E — Verificación
+`bash verificar_lab10.sh <tu_usuario>` → objetivo **11 de 11**.
+## Reflexión
+Si un día al conectarte ves "REMOTE HOST IDENTIFICATION HAS CHANGED", ¿qué haces y qué NO haces?
+capturar.sh
+#!/usr/bin/env bash
+# capturar.sh — "La prueba del espía": inicia sesión por TELNET o por SSH mientras tcpdump graba, y muestra qué
+# se puede leer de la captura. Uso (en el servidor, como root):  bash capturar.sh telnet   |   bash capturar.sh ssh
+set -uo pipefail
+cd "$(dirname "$0")"
+PROTO="${1:?Uso: bash capturar.sh telnet|ssh}"
+USUARIO=secretaria; CLAVE=Circular2026; SECRETO="notas-confidenciales-5to-B"
+[[ $EUID -eq 0 ]] || { echo "Ejecuta como root"; exit 1; }
+command -v expect >/dev/null && command -v tcpdump >/dev/null || apt-get install -y -qq expect tcpdump >/dev/null
+# Usuaria de prueba (solo para el laboratorio)
+id "$USUARIO" &>/dev/null || useradd -m -s /bin/bash "$USUARIO"
+echo "$USUARIO:$CLAVE" | chpasswd
+case $PROTO in
+  telnet) PUERTO=23; CMD="telnet 127.0.0.1"; PIDE="login:" ;;
+  ssh)    PUERTO=22; CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no $USUARIO@127.0.0.1"; PIDE="password:" ;;
+  *) echo "Protocolo desconocido: $PROTO"; exit 1 ;;
+esac
+ss -tln | grep -q ":$PUERTO " || { echo "Nada escucha en el puerto $PUERTO (¿activaste el servicio?)"; exit 1; }
+mkdir -p resultados
+PCAP=resultados/$PROTO.pcap
+timeout 15 tcpdump -i lo -nn -U -w "$PCAP" "tcp port $PUERTO" 2>/dev/null &
+sleep 1
+expect <<EOF >/dev/null 2>&1
+set timeout 10
+spawn $CMD
+expect "$PIDE"
+if {"$PROTO" == "telnet"} { send "$USUARIO\r"; expect "Password:" }
+send "$CLAVE\r"
+expect "\\\$ "
+send "echo $SECRETO\r"
+expect "\\\$ "
+send "exit\r"
+expect eof
+EOF
+sleep 2; pkill -f "tcpdump -i lo -nn -U -w $PCAP" 2>/dev/null; sleep 1
+TEXTO=$(tcpdump -r "$PCAP" -A 2>/dev/null)
+echo "Captura de $PROTO: $(tcpdump -r "$PCAP" 2>/dev/null | wc -l) paquetes → $PCAP (ábrelo en Wireshark)"
+for dato in "$USUARIO" "$CLAVE" "$SECRETO"; do
+  if grep -qa -- "$dato" <<<"$TEXTO"; then echo "  👀 se lee en claro: $dato"; else echo "  🔒 no aparece:     $dato"; fi
+done
+grep -aoE 'SSH-2.0-[A-Za-z0-9_.-]+' <<<"$TEXTO" | sort -u | sed 's/^/  versión anunciada: /'
+{ echo "$PROTO $(date -Iseconds)"; for d in "$USUARIO" "$CLAVE" "$SECRETO"; do grep -qa -- "$d" <<<"$TEXTO" && echo "claro $d" || echo "oculto $d"; done; } > resultados/$PROTO.txt
+telnet_laboratorio.sh
+#!/usr/bin/env bash
+# telnet_laboratorio.sh — Activa o desactiva TELNET SOLO para la demostración. Nunca lo dejes activo.
+# Uso:  bash telnet_laboratorio.sh activar   |   bash telnet_laboratorio.sh desactivar
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Ejecuta como root"; exit 1; }
+case "${1:-}" in
+  activar)
+    dpkg -s telnetd &>/dev/null || { apt-get update -qq; apt-get install -y -qq telnetd openbsd-inetd inetutils-telnet >/dev/null; }
+    update-inetd --enable telnet            # Ubuntu lo instala DESACTIVADO (#<off># en /etc/inetd.conf)
+    systemctl restart openbsd-inetd
+    echo "⚠️  TELNET activo en el puerto 23. Desactívalo al terminar: bash $0 desactivar" ;;
+  desactivar)
+    update-inetd --disable telnet 2>/dev/null || true
+    systemctl disable --now openbsd-inetd 2>/dev/null || true
+    apt-get purge -y -qq telnetd >/dev/null 2>&1 || true
+    ss -tln | grep -q ':23 ' && echo "❌ El puerto 23 sigue abierto" || echo "✅ TELNET desactivado y desinstalado" ;;
+  *) echo "Uso: bash $0 activar|desactivar"; exit 1 ;;
+esac
+preparar_ssh.sh
+#!/usr/bin/env bash
+# preparar_ssh.sh — Identidad propia del servidor y acceso por clave ed25519 para el administrador.
+# Uso (en el servidor, como root):  bash preparar_ssh.sh <usuario_admin>     (el usuario del Lab 2, p. ej. ana)
+set -euo pipefail
+cd "$(dirname "$0")"
+ADMIN="${1:?Uso: bash preparar_ssh.sh <usuario_admin>}"
+[[ $EUID -eq 0 ]] || { echo "Ejecuta como root"; exit 1; }
+id "$ADMIN" &>/dev/null || { echo "No existe $ADMIN (Lab 2)"; exit 1; }
+# 1. Claves de HOST propias: una imagen o VM clonada trae las mismas claves en todos los equipos (misma "cédula")
+if grep -q 'buildkitsandbox\|@localhost' /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || [[ ! -f resultados/.claves_host_regeneradas ]]; then
+  # TODO: borrar las claves de host actuales (/etc/ssh/ssh_host_*) y generar nuevas (pista: ssh-keygen -A)
+  systemctl restart ssh
+  mkdir -p resultados && date -Iseconds > resultados/.claves_host_regeneradas
+fi
+echo "Huella del servidor (compárala en la primera conexión):"
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+# 2. Par de claves del CLIENTE (aquí el cliente es root del servidor; en la vida real, tu PC)
+# TODO: si no existe ~/.ssh/id_ed25519, crear un par ed25519 (-t), con 64 rondas de protección (-a 64),
+#       comentario "admin-horizonte-AAAA" (-C) y sin frase (-N "") — en tu PC real, ¡usa una frase!
+# 3. Autorizar la clave pública en la cuenta del administrador (lo que hace ssh-copy-id)
+install -d -o "$ADMIN" -g "$ADMIN" -m 700 "/home/$ADMIN/.ssh"
+touch "/home/$ADMIN/.ssh/authorized_keys"
+grep -qF "$(cut -d' ' -f2 ~/.ssh/id_ed25519.pub)" "/home/$ADMIN/.ssh/authorized_keys" || cat ~/.ssh/id_ed25519.pub >> "/home/$ADMIN/.ssh/authorized_keys"
+chown "$ADMIN:$ADMIN" "/home/$ADMIN/.ssh/authorized_keys"
+# TODO: permisos correctos de authorized_keys (¿qué hace sshd si otros pueden escribirlo?)
+# 4. known_hosts con la huella REAL (sin aceptar a ciegas) y un alias en ~/.ssh/config
+ssh-keygen -R 127.0.0.1 >/dev/null 2>&1 || true
+ssh-keyscan -t ed25519 127.0.0.1 2>/dev/null >> ~/.ssh/known_hosts
+if ! grep -q '^Host horizonte$' ~/.ssh/config 2>/dev/null; then
+  cat >> ~/.ssh/config <<EOF
+Host horizonte
+    HostName 127.0.0.1
+    User $ADMIN
+    # TODO: IdentityFile con tu clave ed25519 e IdentitiesOnly yes
+EOF
+fi
+chmod 600 ~/.ssh/config
+ssh -o BatchMode=yes horizonte 'echo "Conectado como $(whoami) a $(hostname) con clave ed25519"'
+comunicado.html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comunicado · U.E. Horizonte</title>
+</head>
+<body>
+  <main>
+    <h1>Comunicado 014/2026</h1>
+    <p>Publicado por el equipo de TI mediante SSH (scp) con clave ed25519: sin contraseñas viajando por la red.</p>
+  </main>
+</body>
+</html>
+verificar_lab10.sh
+#!/usr/bin/env bash
+# verificar_lab10.sh — Comprueba el Laboratorio 10 (TELNET vs SSH). Ejecutar en el servidor como root:
+#   bash verificar_lab10.sh <usuario_admin>
+cd "$(dirname "$0")"
+ADMIN="${1:-ana}"
+ok=0; total=0
+revisar() {
+  local desc="$1"; shift; total=$((total + 1))
+  if "$@" &>/dev/null; then echo "✅ $desc"; ok=$((ok + 1)); else echo "❌ $desc"; fi
+}
+telnet_en_claro() { grep -q '^claro Circular2026' resultados/telnet.txt; }
+ssh_oculto()      { grep -q '^oculto Circular2026' resultados/ssh.txt && grep -q '^oculto notas-confidenciales' resultados/ssh.txt; }
+host_propia()     { ! grep -q 'buildkitsandbox' /etc/ssh/ssh_host_ed25519_key.pub && [[ -f resultados/.claves_host_regeneradas ]]; }
+known_ok()        { ssh-keygen -F 127.0.0.1 -f ~/.ssh/known_hosts | grep -q "$(awk '{print $2}' /etc/ssh/ssh_host_ed25519_key.pub)"; }
+clave_cliente()   { ssh-keygen -lf ~/.ssh/id_ed25519.pub | grep -q '(ED25519)'; }
+autorizada()      { grep -qF "$(awk '{print $2}' ~/.ssh/id_ed25519.pub)" "/home/$ADMIN/.ssh/authorized_keys"; }
+permisos()        { [[ $(stat -c %a "/home/$ADMIN/.ssh") == 700 && $(stat -c %a "/home/$ADMIN/.ssh/authorized_keys") == 600 ]]; }
+entra_con_clave() { [[ "$(ssh -o BatchMode=yes horizonte whoami)" == "$ADMIN" ]]; }
+kex_pq()          { ssh -v -o BatchMode=yes horizonte true 2>&1 | grep -q 'kex: algorithm: sntrup761x25519\|kex: algorithm: mlkem768x25519'; }
+publicado()       { [[ -f /srv/horizonte/www/comunicado.html && $(stat -c %U:%G /srv/horizonte/www/comunicado.html) == "$ADMIN:webadmin" ]]; }
+telnet_apagado()  { ! ss -tln | grep -q ':23 '; }
+revisar "Captura TELNET: la contraseña se lee en claro"         telnet_en_claro
+revisar "Captura SSH: contraseña y datos NO se leen"            ssh_oculto
+revisar "Claves de host propias (no las de la imagen)"          host_propia
+revisar "known_hosts con la huella real del servidor"           known_ok
+revisar "Clave del cliente ed25519"                             clave_cliente
+revisar "Clave pública autorizada en la cuenta de $ADMIN"       autorizada
+revisar "Permisos de ~/.ssh (700) y authorized_keys (600)"      permisos
+revisar "Acceso con clave y alias 'horizonte' (sin contraseña)"  entra_con_clave
+revisar "Intercambio de claves híbrido post-cuántico"           kex_pq
+revisar "comunicado.html publicado por scp (dueño $ADMIN, grupo webadmin)" publicado
+revisar "TELNET desactivado al terminar (puerto 23 cerrado)"    telnet_apagado
+echo "Resultado: $ok de $total comprobaciones"
+[[ $ok -eq $total ]]
